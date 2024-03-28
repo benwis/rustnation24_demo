@@ -36,6 +36,13 @@ pub fn App() -> impl IntoView {
 fn HomePage() -> impl IntoView {
     let update_count = create_server_action::<UpdateCount>();
     let count_resource = create_resource(move || (update_count.version().get()), |_| get_count());
+
+    let query = use_query_map();
+    let initial_increment = move || {
+        query
+            .with(|q| q.get("increment").cloned())
+            .unwrap_or_else(|| "1".to_string())
+    };
     view! {
         <h1>"Welcome to Leptos!"</h1>
         // if you have `--hot-reload` running, adding something like a <p> below is a good
@@ -56,7 +63,7 @@ fn HomePage() -> impl IntoView {
             // it would be nice to have some way of having a default value, or using the previous
             // value, for the value of this input field -- that way it would persist across POSTs
             // when JS is off. Not super necessary though
-            <input type="number" name="increment_by"/>
+            <input type="number" name="increment_by" value=initial_increment/>
             <button type="submit">Update</button>
         </ActionForm>
     }
@@ -74,6 +81,8 @@ pub async fn get_count() -> Result<i64, ServerFnError> {
 
 #[server]
 pub async fn update_count(increment_by: i64) -> Result<i64, ServerFnError> {
+    use leptos_axum::redirect;
+
     // unless I'm missing some other reasoning (like explaining that you can call a server fn from
     // another server fn without going out through HTTP), it seems like you can just update the
     // value in the lock directly
@@ -81,5 +90,6 @@ pub async fn update_count(increment_by: i64) -> Result<i64, ServerFnError> {
     // nice to have the ? here throwing out to the ServerFnError
     let mut writer = count_wrapper.write()?;
     *writer += increment_by;
+    redirect(&format!("/?increment={increment_by}"));
     Ok(*writer)
 }
