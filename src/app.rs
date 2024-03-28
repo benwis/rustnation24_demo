@@ -6,9 +6,11 @@ use leptos_router::*;
 #[component]
 pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
-    provide_meta_context(); 
+    provide_meta_context();
 
     view! {
+        // good opportunity here to also demonstrate CSS hot-reloading for people
+        // i.e., if you go and edit this CSS file the changes appear instantly
         <Stylesheet id="leptos" href="/pkg/rustnation24-complete.css"/>
 
         // sets the document title
@@ -33,23 +35,27 @@ pub fn App() -> impl IntoView {
 #[component]
 fn HomePage() -> impl IntoView {
     let update_count = create_server_action::<UpdateCount>();
-    let count_resource = create_resource(move ||(update_count.version().get()), |_| get_count());
+    let count_resource = create_resource(move || (update_count.version().get()), |_| get_count());
     view! {
         <h1>"Welcome to Leptos!"</h1>
+        // if you have `--hot-reload` running, adding something like a <p> below is a good
+        // hot-reloading demo
+        // <p>"Hot reloading works!"</p>
 
         <span>
             "Count: "
             <Transition>
-
-                {
-                    let count = move || { count_resource.get().and_then(|n| n.ok()).unwrap_or(0) };
-                    move || count().to_string()
-                }
-
+                // you can render the resource directly here, because
+                // Option<Result<i64, ServerFnError>> does implement IntoView
+                // you could use an ErrorBoundary to catch errors from the server fn if you want
+                {count_resource}
             </Transition>
         </span>
         <ActionForm action=update_count>
             <span>Increment By:</span>
+            // it would be nice to have some way of having a default value, or using the previous
+            // value, for the value of this input field -- that way it would persist across POSTs
+            // when JS is off. Not super necessary though
             <input type="number" name="increment_by"/>
             <button type="submit">Update</button>
         </ActionForm>
@@ -58,20 +64,22 @@ fn HomePage() -> impl IntoView {
 
 /// Get the Count from the server
 #[server]
-pub async fn get_count() -> Result<i64, ServerFnError>{
+pub async fn get_count() -> Result<i64, ServerFnError> {
     let reader = expect_context::<crate::Count>();
-    let count = *reader.read().unwrap();
+    // added ? like the update_count below, this is nice
+    let count = *reader.read()?;
 
     Ok(count)
 }
 
 #[server]
-pub async fn update_count( increment_by: i64) -> Result<i64, ServerFnError>{
-    let count = get_count().await.unwrap();
-
-    let new_count = count+increment_by;
+pub async fn update_count(increment_by: i64) -> Result<i64, ServerFnError> {
+    // unless I'm missing some other reasoning (like explaining that you can call a server fn from
+    // another server fn without going out through HTTP), it seems like you can just update the
+    // value in the lock directly
     let count_wrapper = expect_context::<crate::Count>();
+    // nice to have the ? here throwing out to the ServerFnError
     let mut writer = count_wrapper.write()?;
-    *writer = new_count;
-    Ok(new_count)
+    *writer += increment_by;
+    Ok(*writer)
 }
